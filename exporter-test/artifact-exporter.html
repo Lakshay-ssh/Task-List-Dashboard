@@ -204,6 +204,30 @@
     padding: 24px;
     text-align: center;
   }
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(22, 35, 43, 0.45);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 20;
+    padding: 24px;
+  }
+  .modal-backdrop.show { display: flex; }
+  .modal {
+    background: var(--panel);
+    border-radius: 8px;
+    max-width: 480px;
+    padding: 24px 28px;
+    box-shadow: 0 12px 40px rgba(22, 35, 43, 0.25);
+  }
+  .modal h2 { font-size: 17px; margin: 0 0 10px; }
+  .modal p, .modal li { font-size: 14px; color: var(--muted); }
+  .modal ol { padding-left: 20px; margin: 8px 0 4px; }
+  .modal li { margin-bottom: 6px; }
+  .modal li strong { color: var(--ink); }
+  .modal-actions { display: flex; gap: 8px; margin-top: 18px; flex-wrap: wrap; }
   .toast {
     position: fixed;
     bottom: 22px;
@@ -295,6 +319,22 @@
 <footer>
   Everything runs locally in this page — nothing you paste is uploaded. HTML, SVG, and Markdown exports are fully self-contained; Mermaid and React exports reference public CDNs.
 </footer>
+
+<div class="modal-backdrop" id="fallback">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="fb-title">
+    <h2 id="fb-title">This viewer blocks file downloads</h2>
+    <p>The page is running inside an embedded pane that doesn’t allow saving files. Two dependable ways to get your file:</p>
+    <ol>
+      <li><strong>Copy HTML</strong>, paste it into any text editor (TextEdit, VS Code), and save it with a <code>.html</code> name.</li>
+      <li><strong>Open in new tab</strong> below, then press <strong>⌘S</strong> to save the page.</li>
+    </ol>
+    <div class="modal-actions">
+      <button class="action primary" id="fb-copy">Copy HTML</button>
+      <button class="action" id="fb-open">Open in new tab</button>
+      <button class="action" id="fb-close">Close</button>
+    </div>
+  </div>
+</div>
 
 <div class="toast" id="toast">Copied</div>
 
@@ -677,12 +717,29 @@
     a.remove();
     setTimeout(function () { URL.revokeObjectURL(a.href); }, 4000);
     if (window.self !== window.top) {
-      // Sandboxed preview panes often swallow downloads without any error.
-      showToast('If no download started, open this page in your browser, or use Copy HTML');
+      // Sandboxed panes (like artifact viewers) swallow downloads without any
+      // error we can catch — offer working alternatives instead of guessing.
+      document.getElementById('fallback').classList.add('show');
     } else {
       showToast('Downloading ' + filename + ' to your browser’s download folder');
     }
   }
+
+  document.getElementById('fb-close').addEventListener('click', function () {
+    document.getElementById('fallback').classList.remove('show');
+  });
+  document.getElementById('fb-copy').addEventListener('click', function () {
+    navigator.clipboard.writeText(currentOutput).then(function () {
+      showToast('HTML copied — paste into a text editor and save as .html');
+    }, function () {
+      showToast('Copy failed — select the text manually');
+    });
+  });
+  document.getElementById('fb-open').addEventListener('click', function () {
+    var blob = new Blob([currentOutput], { type: 'text/html' });
+    var w = window.open(URL.createObjectURL(blob), '_blank');
+    if (!w) showToast('Pop-up blocked by this viewer — use Copy HTML instead');
+  });
 
   document.getElementById('copy').addEventListener('click', function () {
     if (!currentOutput) { showToast('Nothing to copy yet'); return; }
