@@ -1,8 +1,13 @@
+from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from datetime import datetime, timedelta
 from app.schemas import Task, TasksResponse
 from app.services.task_parser import extract_tasks_hybrid
+
+# Frontend directory (sibling of backend/)
+FRONTEND_DIR = Path(__file__).resolve().parents[2] / "frontend"
 
 app = FastAPI(title="Gmail Tasks API", version="0.1.0")
 
@@ -110,6 +115,15 @@ def get_tasks():
             deduped_tasks.append(task)
 
     return TasksResponse(tasks=deduped_tasks, total=len(deduped_tasks))
+
+
+@app.get("/")
+def serve_dashboard():
+    """Serve the dashboard frontend at the root URL."""
+    index = FRONTEND_DIR / "index.html"
+    if index.exists():
+        return FileResponse(index)
+    return {"message": "Dashboard frontend not found. See README."}
 
 
 if __name__ == "__main__":

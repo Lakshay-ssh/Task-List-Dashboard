@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gmail Tasks Dashboard</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.24.0/babel.min.js"></script>
+  <style>
+    :root {
+      --bg-dark: #0f1419;
+      --text-primary: #f0f4f8;
+      --text-secondary: #a0aec0;
+      --text-muted: #7a8a9e;
+      --border-light: rgba(255, 255, 255, 0.1);
+      --accent-blue: #3b82f6;
+      --accent-blue-hover: #60a5fa;
+      --glass-bg: rgba(255, 255, 255, 0.08);
+      --glass-border: rgba(255, 255, 255, 0.15);
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg-dark: #f8fafc;
+        --text-primary: #0f1419;
+        --text-secondary: #4a5568;
+        --text-muted: #718096;
+        --border-light: rgba(15, 20, 25, 0.08);
+        --glass-bg: rgba(15, 20, 25, 0.04);
+        --glass-border: rgba(15, 20, 25, 0.1);
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg-dark);
+      color: var(--text-primary);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      font-size: 15px;
+      line-height: 1.6;
+    }
+    @keyframes slideIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    @keyframes backdropIn { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes modalIn { from { opacity: 0; transform: scale(0.95) translateY(20px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+    input[type="text"], input[type="date"] {
+      background: rgba(255, 255, 255, 0.05); border: 1px solid var(--glass-border);
+      color: var(--text-primary); padding: 8px 12px; border-radius: 6px;
+      font-size: 14px; font-family: inherit; transition: all 0.2s ease;
+    }
+    input[type="text"]:focus, input[type="date"]:focus {
+      outline: none; border-color: var(--accent-blue); box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+    }
+    input[type="checkbox"] { accent-color: var(--accent-blue); cursor: pointer; }
+    select {
+      background: rgba(255, 255, 255, 0.05); border: 1px solid var(--glass-border);
+      color: var(--text-primary); padding: 8px 12px; border-radius: 6px;
+      font-size: 14px; font-family: inherit; cursor: pointer;
+    }
+    select:focus { outline: none; border-color: var(--accent-blue); }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useMemo } = React;
+
+    const API_URL = '/api/tasks';
+
+    const TaskCard = ({ task, index, onClick, isCompleted }) => {
+      const priorityColors = {
+        high: { bg: 'rgba(239, 68, 68, 0.15)', border: 'rgba(239, 68, 68, 0.3)', text: '#ef4444', label: 'High' },
+        medium: { bg: 'rgba(245, 158, 11, 0.15)', border: 'rgba(245, 158, 11, 0.3)', text: '#f59e0b', label: 'Medium' },
+        low: { bg: 'rgba(120, 113, 108, 0.15)', border: 'rgba(120, 113, 108, 0.3)', text: '#78716c', label: 'Low' }
+      };
+      const colors = priorityColors[task.priority || 'low'];
+      const isOverdue = new Date(task.due_date) < new Date() && !isCompleted;
+      const daysUntilDue = Math.ceil((new Date(task.due_date) - new Date()) / (1000 * 60 * 60 * 24));
+      const dueDateDisplay = isOverdue ? `Overdue ${Math.abs(daysUntilDue)}d` : daysUntilDue <= 1 ? 'Due today' : daysUntilDue <= 7 ? `Due ${daysUntilDue}d` : task.due_date;
+
+      return (
+        <div onClick={onClick} style={{
+          background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', borderRadius: '12px',
+          padding: '16px', backdropFilter: 'blur(10px)', boxShadow: '0 8px 32px rgba(0,0,0,0.1)',
+          transition: 'all 0.2s ease', cursor: 'pointer', animation: `slideIn 0.3s ease-out ${index * 0.05}s both`,
+          display: 'flex', flexDirection: 'column', gap: '12px', opacity: isCompleted ? 0.4 : 1,
+        }}
+          onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--accent-blue)'; e.currentTarget.style.boxShadow = '0 12px 48px rgba(59,130,246,0.15)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--glass-border)'; e.currentTarget.style.boxShadow = '0 8px 32px rgba(0,0,0,0.1)'; e.currentTarget.style.transform = 'translateY(0)'; }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
+            <div style={{ flex: 1 }}>
+              <h3 style={{ margin: '0 0 4px 0', fontSize: '16px', fontWeight: 500, color: 'var(--text-primary)', textDecoration: isCompleted ? 'line-through' : 'none' }}>{task.title}</h3>
+              <p style={{ margin: '0 0 8px 0', fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>{task.description}</p>
+            </div>
+            <div style={{ background: colors.bg, border: `1px solid ${colors.border}`, color: colors.text, padding: '4px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 500, whiteSpace: 'nowrap', flexShrink: 0 }}>{colors.label}</div>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px', color: 'var(--text-muted)' }}>
+            <span>{task.sender}</span>
+            <span style={{ color: isOverdue ? '#ef4444' : 'var(--text-muted)', fontWeight: isOverdue ? 500 : 400 }}>{dueDateDisplay}</span>
+          </div>
+        </div>
+      );
+    };
+
+    const TaskModal = ({ task, isOpen, onClose, onToggleComplete, isCompleted }) => {
+      if (!isOpen || !task) return null;
+      return (
+        <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, animation: 'backdropIn 0.2s ease' }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: 'var(--bg-dark)', border: '1px solid var(--glass-border)', borderRadius: '16px', padding: '32px', maxWidth: '480px', width: '90%', boxShadow: '0 20px 60px rgba(0,0,0,0.3)', animation: 'modalIn 0.3s ease' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
+              <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 500, color: 'var(--text-primary)', textDecoration: isCompleted ? 'line-through' : 'none' }}>{task.title}</h2>
+              <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', fontSize: '24px', cursor: 'pointer', padding: 0, width: '32px', height: '32px' }}>✕</button>
+            </div>
+            <div style={{ marginBottom: '24px', paddingBottom: '20px', borderBottom: '1px solid var(--border-light)' }}>
+              <p style={{ margin: 0, fontSize: '14px', color: 'var(--text-secondary)', lineHeight: 1.6 }}>{task.description}</p>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '24px' }}>
+              <div><p style={{ margin: '0 0 8px 0', fontSize: '12px', color: 'var(--text-muted)', fontWeight: 500 }}>From</p><p style={{ margin: 0, fontSize: '14px' }}>{task.sender}</p></div>
+              <div><p style={{ margin: '0 0 8px 0', fontSize: '12px', color: 'var(--text-muted)', fontWeight: 500 }}>Due</p><p style={{ margin: 0, fontSize: '14px' }}>{task.due_date}</p></div>
+              <div><p style={{ margin: '0 0 8px 0', fontSize: '12px', color: 'var(--text-muted)', fontWeight: 500 }}>Priority</p><p style={{ margin: 0, fontSize: '14px', color: task.priority === 'high' ? '#ef4444' : task.priority === 'medium' ? '#f59e0b' : '#78716c', fontWeight: 500 }}>{task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}</p></div>
+              <div><p style={{ margin: '0 0 8px 0', fontSize: '12px', color: 'var(--text-muted)', fontWeight: 500 }}>Status</p><p style={{ margin: 0, fontSize: '14px', color: isCompleted ? '#10b981' : 'var(--text-primary)' }}>{isCompleted ? '✓ Completed' : 'Pending'}</p></div>
+            </div>
+            <button onClick={onToggleComplete} style={{ width: '100%', padding: '12px 16px', background: isCompleted ? 'rgba(16,185,129,0.2)' : 'var(--accent-blue)', border: isCompleted ? '1px solid rgba(16,185,129,0.4)' : 'none', color: isCompleted ? '#10b981' : '#fff', borderRadius: '8px', fontSize: '14px', fontWeight: 500, cursor: 'pointer' }}>{isCompleted ? '✓ Mark incomplete' : '✓ Mark complete'}</button>
+          </div>
+        </div>
+      );
+    };
+
+    const Dashboard = () => {
+      const [tasks, setTasks] = useState([]);
+      const [isLoading, setIsLoading] = useState(true);
+      const [error, setError] = useState(null);
+      const [isRefreshing, setIsRefreshing] = useState(false);
+      const [searchQuery, setSearchQuery] = useState('');
+      const [selectedPriorities, setSelectedPriorities] = useState(['high', 'medium', 'low']);
+      const [sortBy, setSortBy] = useState('priority');
+      const [expandedTask, setExpandedTask] = useState(null);
+      const [completedTasks, setCompletedTasks] = useState(new Set());
+      const [dueDateRange, setDueDateRange] = useState({ start: '', end: '' });
+
+      const fetchTasks = async () => {
+        try {
+          setError(null);
+          const response = await fetch(API_URL);
+          if (!response.ok) throw new Error(`API error: ${response.status}`);
+          const data = await response.json();
+          setTasks(data.tasks || []);
+        } catch (err) {
+          setError(err.message);
+        }
+      };
+
+      useEffect(() => { (async () => { await fetchTasks(); setIsLoading(false); })(); }, []);
+
+      const handleRefresh = async () => { setIsRefreshing(true); await new Promise(r => setTimeout(r, 400)); await fetchTasks(); setIsRefreshing(false); };
+      const togglePriority = (p) => setSelectedPriorities(prev => prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p]);
+      const toggleCompleted = (id) => setCompletedTasks(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
+
+      const filtered = useMemo(() => {
+        let f = tasks.filter(t => {
+          const ms = !searchQuery || t.title.toLowerCase().includes(searchQuery.toLowerCase()) || t.description.toLowerCase().includes(searchQuery.toLowerCase()) || t.sender.toLowerCase().includes(searchQuery.toLowerCase());
+          const mp = selectedPriorities.includes(t.priority);
+          const d = new Date(t.due_date);
+          const md = (!dueDateRange.start || d >= new Date(dueDateRange.start)) && (!dueDateRange.end || d <= new Date(dueDateRange.end));
+          return ms && mp && md;
+        });
+        return [...f].sort((a, b) => {
+          if (sortBy === 'priority') { const o = { high: 0, medium: 1, low: 2 }; if (o[a.priority] !== o[b.priority]) return o[a.priority] - o[b.priority]; return new Date(a.due_date) - new Date(b.due_date); }
+          if (sortBy === 'dueDate') return new Date(a.due_date) - new Date(b.due_date);
+          if (sortBy === 'sender') return a.sender.localeCompare(b.sender);
+          return 0;
+        });
+      }, [tasks, searchQuery, selectedPriorities, sortBy, dueDateRange]);
+
+      return (
+        <div style={{ background: 'var(--bg-dark)', minHeight: '100vh', padding: '24px' }}>
+          <div style={{ maxWidth: '1400px', margin: '0 auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
+              <div>
+                <h1 style={{ margin: '0 0 4px 0', fontSize: '28px', fontWeight: 500 }}>Gmail Tasks Dashboard</h1>
+                <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-muted)' }}>Created by Lakshay</p>
+              </div>
+              <button onClick={handleRefresh} disabled={isRefreshing} style={{ background: 'var(--accent-blue)', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '8px', cursor: isRefreshing ? 'not-allowed' : 'pointer', fontSize: '14px', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '8px', opacity: isRefreshing ? 0.6 : 1 }}>
+                <span style={{ display: 'inline-block', animation: isRefreshing ? 'spin 0.8s linear infinite' : 'none', fontSize: '16px' }}>↻</span>
+                {isRefreshing ? 'Refreshing…' : 'Refresh'}
+              </button>
+            </div>
+
+            {error && (
+              <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#ef4444', padding: '12px 16px', borderRadius: '8px', marginBottom: '20px', fontSize: '13px' }}>
+                Connection error: {error}. Start backend on port 8000 first (see README).
+              </div>
+            )}
+
+            <div style={{ display: 'grid', gridTemplateColumns: '240px 1fr', gap: '24px' }}>
+              <div style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', borderRadius: '12px', padding: '20px', backdropFilter: 'blur(10px)', height: 'fit-content', position: 'sticky', top: '24px' }}>
+                <h3 style={{ margin: '0 0 16px 0', fontSize: '14px', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Filter</h3>
+                <div style={{ marginBottom: '24px' }}>
+                  {['high', 'medium', 'low'].map(p => (
+                    <label key={p} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', cursor: 'pointer', fontSize: '13px', color: 'var(--text-secondary)' }}>
+                      <input type="checkbox" checked={selectedPriorities.includes(p)} onChange={() => togglePriority(p)} />
+                      <span>{p.charAt(0).toUpperCase() + p.slice(1)}</span>
+                    </label>
+                  ))}
+                </div>
+                <h3 style={{ margin: '0 0 12px 0', fontSize: '12px', fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Due Date Range</h3>
+                <input type="date" value={dueDateRange.start} onChange={(e) => setDueDateRange(p => ({ ...p, start: e.target.value }))} style={{ width: '100%', marginBottom: '8px' }} />
+                <input type="date" value={dueDateRange.end} onChange={(e) => setDueDateRange(p => ({ ...p, end: e.target.value }))} style={{ width: '100%' }} />
+                <h3 style={{ margin: '24px 0 12px 0', fontSize: '12px', fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Sort By</h3>
+                <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} style={{ width: '100%' }}>
+                  <option value="priority">Priority + Due Date</option>
+                  <option value="dueDate">Due Date</option>
+                  <option value="sender">Sender</option>
+                </select>
+              </div>
+
+              <div>
+                <input type="text" placeholder="Search tasks, description, sender..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} style={{ width: '100%', padding: '12px 16px', marginBottom: '20px' }} />
+                <div style={{ marginBottom: '16px', color: 'var(--text-secondary)', fontSize: '13px' }}>
+                  {isLoading ? 'Loading...' : `${filtered.length} task${filtered.length !== 1 ? 's' : ''} • ${completedTasks.size} completed`}
+                </div>
+                {isLoading ? (
+                  <div style={{ textAlign: 'center', padding: '64px 24px', color: 'var(--text-muted)' }}><p style={{ margin: 0 }}>Loading tasks from backend...</p></div>
+                ) : filtered.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '64px 24px', color: 'var(--text-muted)' }}>
+                    <p style={{ margin: 0 }}>{searchQuery || dueDateRange.start || dueDateRange.end || selectedPriorities.length < 3 ? 'No tasks match your filters' : 'No pending tasks. Great work!'}</p>
+                  </div>
+                ) : (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '16px' }}>
+                    {filtered.map((task, idx) => <TaskCard key={task.id} task={task} index={idx} onClick={() => setExpandedTask(task)} isCompleted={completedTasks.has(task.id)} />)}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+          <TaskModal task={expandedTask} isOpen={!!expandedTask} onClose={() => setExpandedTask(null)} onToggleComplete={() => expandedTask && toggleCompleted(expandedTask.id)} isCompleted={expandedTask ? completedTasks.has(expandedTask.id) : false} />
+        </div>
+      );
+    };
+
+    ReactDOM.render(<Dashboard />, document.getElementById('root'));
+  </script>
+</body>
+</html>
