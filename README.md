@@ -4,33 +4,32 @@ Interactive dashboard extracting pending tasks from Gmail inbox with priority al
 
 ## Quick Start
 
-### 1. Install Dependencies
+Two commands. The backend serves both the API and the dashboard on one port.
+
+### 1. Install dependencies
 
 ```bash
-uv sync --project backend
+cd backend && uv sync && cd ..
 ```
 
-### 2. Start Backend
+### 2. Start the server
 
 ```bash
-uv run --project backend python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+uv run --project backend python -m uvicorn app.main:app --port 8000 --reload
 ```
 
-Or use Claude Code launch: `/preview start backend`
+Or use Claude Code launch: start the `backend` config from the Launch panel.
 
-Backend runs on `http://localhost:8000`
-- Health check: `GET /health`
-- Tasks API: `GET /api/tasks` → returns JSON list of extracted tasks
+### 3. Open the dashboard
 
-### 3. Run Dashboard Artifact
+Open **http://localhost:8000/** in any browser.
 
-The dashboard is a React artifact that runs in the browser. Update the artifact to call the real API:
+- `GET /` → dashboard UI ([frontend/index.html](frontend/index.html))
+- `GET /api/tasks` → JSON list of extracted tasks
+- `GET /health` → status check
 
-```javascript
-const response = await fetch('http://localhost:8000/api/tasks');
-const data = await response.json();
-setTasks(data.tasks);
-```
+That's it. Refresh button re-fetches from the backend. Filters, search, task
+detail modal, and completion toggle all work client-side.
 
 ### 4. Wire Real Gmail (Future)
 
