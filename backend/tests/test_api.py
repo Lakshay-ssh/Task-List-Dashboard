@@ -1,6 +1,8 @@
 import pytest
 from fastapi.testclient import TestClient
-from app.main import app
+from app.main import app, DASHBOARD_USER, DASHBOARD_PASSWORD
+
+AUTH = (DASHBOARD_USER, DASHBOARD_PASSWORD)
 
 
 @pytest.fixture
@@ -15,9 +17,21 @@ class TestHealthEndpoint:
         assert response.json() == {"status": "ok"}
 
 
+class TestAuth:
+    def test_tasks_requires_auth(self, client):
+        # No credentials -> 401
+        assert client.get("/api/tasks").status_code == 401
+
+    def test_tasks_rejects_bad_password(self, client):
+        assert client.get("/api/tasks", auth=(DASHBOARD_USER, "wrong")).status_code == 401
+
+    def test_root_requires_auth(self, client):
+        assert client.get("/").status_code == 401
+
+
 class TestTasksEndpoint:
     def test_get_tasks_success(self, client):
-        response = client.get("/api/tasks")
+        response = client.get("/api/tasks", auth=AUTH)
         assert response.status_code == 200
 
         data = response.json()
@@ -27,7 +41,7 @@ class TestTasksEndpoint:
         assert isinstance(data["total"], int)
 
     def test_tasks_have_required_fields(self, client):
-        response = client.get("/api/tasks")
+        response = client.get("/api/tasks", auth=AUTH)
         data = response.json()
 
         if data["tasks"]:
@@ -41,34 +55,34 @@ class TestTasksEndpoint:
             assert "completed" in task
 
     def test_tasks_priority_valid(self, client):
-        response = client.get("/api/tasks")
+        response = client.get("/api/tasks", auth=AUTH)
         data = response.json()
 
         for task in data["tasks"]:
             assert task["priority"] in ["high", "medium", "low"]
 
     def test_tasks_completed_is_boolean(self, client):
-        response = client.get("/api/tasks")
+        response = client.get("/api/tasks", auth=AUTH)
         data = response.json()
 
         for task in data["tasks"]:
             assert isinstance(task["completed"], bool)
 
     def test_tasks_count_matches(self, client):
-        response = client.get("/api/tasks")
+        response = client.get("/api/tasks", auth=AUTH)
         data = response.json()
 
         assert data["total"] == len(data["tasks"])
 
     def test_mock_data_has_tasks(self, client):
-        response = client.get("/api/tasks")
+        response = client.get("/api/tasks", auth=AUTH)
         data = response.json()
 
         # Mock data should have at least some tasks
         assert len(data["tasks"]) > 0
 
     def test_tasks_are_deduplicated(self, client):
-        response = client.get("/api/tasks")
+        response = client.get("/api/tasks", auth=AUTH)
         data = response.json()
 
         task_ids = [task["id"] for task in data["tasks"]]
@@ -78,7 +92,7 @@ class TestTasksEndpoint:
 
 class TestCORS:
     def test_cors_enabled(self, client):
-        response = client.get("/api/tasks")
+        response = client.get("/api/tasks", auth=AUTH)
         # CORS headers should be present in response
         assert response.status_code == 200
 

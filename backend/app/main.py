@@ -1,8 +1,11 @@
 import json
+import os
+import secrets
 from pathlib import Path
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from datetime import datetime, timedelta
 from app.schemas import Task, TasksResponse
 from app.services.task_parser import extract_tasks_hybrid
@@ -12,6 +15,36 @@ from app.services import gmail_client
 FRONTEND_DIR = Path(__file__).resolve().parents[2] / "frontend"
 # Synced Gmail snapshot (real tasks pulled read-only)
 GMAIL_CACHE = Path(__file__).resolve().parent / "data" / "gmail_tasks.json"
+
+# --- Password protection (important when exposed via a public tunnel) ---
+# Credentials come from env. If DASHBOARD_PASSWORD is unset we generate a random
+# one at startup and print it, so the app is never accidentally left open.
+DASHBOARD_USER = os.environ.get("DASHBOARD_USER", "lakshay")
+DASHBOARD_PASSWORD = os.environ.get("DASHBOARD_PASSWORD")
+if not DASHBOARD_PASSWORD:
+    DASHBOARD_PASSWORD = secrets.token_urlsafe(9)
+    print("=" * 60)
+    print("  No DASHBOARD_PASSWORD set — generated a temporary one:")
+    print(f"  user: {DASHBOARD_USER}")
+    print(f"  password: {DASHBOARD_PASSWORD}")
+    print("  Set DASHBOARD_PASSWORD env var to choose your own.")
+    print("=" * 60)
+
+_basic = HTTPBasic()
+
+
+def require_auth(credentials: HTTPBasicCredentials = Depends(_basic)):
+    """HTTP Basic auth guard. Constant-time compare to avoid timing leaks."""
+    ok_user = secrets.compare_digest(credentials.username, DASHBOARD_USER)
+    ok_pass = secrets.compare_digest(credentials.password, DASHBOARD_PASSWORD)
+    if not (ok_user and ok_pass):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+    return credentials.username
+
 
 app = FastAPI(title="Gmail Tasks API", version="0.1.0")
 
@@ -121,7 +154,7 @@ def _tasks_from_mock() -> list[Task]:
 
 
 @app.get("/api/tasks", response_model=TasksResponse)
-def get_tasks():
+def get_tasks(user: str = Depends(require_auth)):
     """
     Return pending tasks. Source precedence:
       1. Live Gmail (read-only) when OAuth is configured (credentials/token present)
@@ -146,8 +179,8 @@ def get_tasks():
 
 
 @app.get("/")
-def serve_dashboard():
-    """Serve the dashboard frontend at the root URL."""
+def serve_dashboard(user: str = Depends(require_auth)):
+    """Serve the dashboard frontend at the root URL (behind Basic auth)."""
     index = FRONTEND_DIR / "index.html"
     if index.exists():
         return FileResponse(index)
