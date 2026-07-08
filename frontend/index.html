@@ -51,17 +51,21 @@
       font-size: 15px; line-height: 1.6;
       overflow-x: hidden;
     }
-    /* Cursor-reactive ambient background */
+    /* Ambient background: static base gradient + GPU-transformed blurred blobs
+       that follow the cursor. Moving transforms is cheap; repainting gradients
+       every frame is not — that was the lag. */
     #aurora {
-      position: fixed; inset: 0; z-index: -1; pointer-events: none;
-      background:
-        radial-gradient(600px circle at var(--mx, 50%) var(--my, 35%), var(--accent-soft), transparent 60%),
-        radial-gradient(800px circle at calc(100% - var(--mx, 50%)) calc(100% - var(--my, 40%)), rgba(110, 231, 183, 0.10), transparent 55%),
-        linear-gradient(160deg, var(--bg-1), var(--bg-0));
-      transition: background 0.25s ease-out;
+      position: fixed; inset: 0; z-index: -1; pointer-events: none; overflow: hidden;
+      background: linear-gradient(160deg, var(--bg-1), var(--bg-0));
     }
+    .blob {
+      position: absolute; top: 0; left: 0; border-radius: 50%;
+      filter: blur(90px); will-change: transform; pointer-events: none;
+    }
+    .blob-a { width: 520px; height: 520px; background: var(--accent-soft); }
+    .blob-b { width: 640px; height: 640px; background: rgba(110, 231, 183, 0.10); }
     @media (prefers-reduced-motion: reduce) {
-      #aurora { transition: none; }
+      .blob { display: none; }
       * { animation: none !important; }
     }
     @keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
@@ -93,7 +97,10 @@
   </style>
 </head>
 <body>
-  <div id="aurora"></div>
+  <div id="aurora">
+    <div class="blob blob-a" id="blobA"></div>
+    <div class="blob blob-b" id="blobB"></div>
+  </div>
   <div id="root"></div>
   <script type="text/babel">
     const { useState, useEffect, useMemo, useRef } = React;
@@ -220,15 +227,31 @@
 
       useEffect(() => { (async () => { await fetchTasks(); setIsLoading(false); })(); }, []);
 
-      // Cursor-reactive ambient background
+      // Cursor-reactive ambient background: blobs ease toward the cursor in a
+      // single rAF loop (transform-only, GPU). No per-event repaint = no lag.
       useEffect(() => {
-        const el = document.getElementById('aurora');
-        const onMove = (e) => {
-          el.style.setProperty('--mx', `${(e.clientX / window.innerWidth) * 100}%`);
-          el.style.setProperty('--my', `${(e.clientY / window.innerHeight) * 100}%`);
+        const a = document.getElementById('blobA');
+        const b = document.getElementById('blobB');
+        if (!a || !b) return;
+        const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        if (reduce) return;
+
+        let tx = window.innerWidth / 2, ty = window.innerHeight * 0.35;
+        let ax = tx, ay = ty, bx = tx, by = ty;
+        const onMove = (e) => { tx = e.clientX; ty = e.clientY; };
+        window.addEventListener('mousemove', onMove, { passive: true });
+
+        let raf;
+        const tick = () => {
+          // lerp — smaller factor = smoother/laggier trail; b trails slower than a
+          ax += (tx - ax) * 0.12; ay += (ty - ay) * 0.12;
+          bx += (tx - bx) * 0.06; by += (ty - by) * 0.06;
+          a.style.transform = `translate3d(${ax - 260}px, ${ay - 260}px, 0)`;
+          b.style.transform = `translate3d(${(window.innerWidth - bx) - 320}px, ${(window.innerHeight - by) - 320}px, 0)`;
+          raf = requestAnimationFrame(tick);
         };
-        window.addEventListener('mousemove', onMove);
-        return () => window.removeEventListener('mousemove', onMove);
+        raf = requestAnimationFrame(tick);
+        return () => { window.removeEventListener('mousemove', onMove); cancelAnimationFrame(raf); };
       }, []);
 
       const handleRefresh = async () => { setIsRefreshing(true); await fetchTasks(); setIsRefreshing(false); };
@@ -311,7 +334,7 @@
                     {searchQuery || selectedPriorities.length < 3 ? 'No tasks match your filters.' : 'No pending tasks. All clear.'}
                   </div>
                 ) : (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '18px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                     {filtered.map((task, idx) => (
                       <TaskCard key={task.id} task={task} index={idx} onClick={() => setExpandedTask(task)} isCompleted={completedTasks.has(task.id)} />
                     ))}
