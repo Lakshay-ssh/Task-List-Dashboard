@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -5,9 +6,12 @@ from fastapi.responses import FileResponse
 from datetime import datetime, timedelta
 from app.schemas import Task, TasksResponse
 from app.services.task_parser import extract_tasks_hybrid
+from app.services import gmail_client
 
 # Frontend directory (sibling of backend/)
 FRONTEND_DIR = Path(__file__).resolve().parents[2] / "frontend"
+# Synced Gmail snapshot (real tasks pulled read-only)
+GMAIL_CACHE = Path(__file__).resolve().parent / "data" / "gmail_tasks.json"
 
 app = FastAPI(title="Gmail Tasks API", version="0.1.0")
 
@@ -88,33 +92,57 @@ def health_check():
     return {"status": "ok"}
 
 
-@app.get("/api/tasks", response_model=TasksResponse)
-def get_tasks():
-    """
-    Fetch and extract tasks from Gmail inbox.
-    Currently uses mock data; will be replaced with real Gmail API calls.
-    """
-    all_tasks = []
+def _tasks_from_cache() -> list[Task] | None:
+    """Load the synced real-Gmail snapshot, if present."""
+    if not GMAIL_CACHE.exists():
+        return None
+    data = json.loads(GMAIL_CACHE.read_text())
+    return [Task(**t) for t in data.get("tasks", [])]
 
+
+def _tasks_from_mock() -> list[Task]:
+    """Extract tasks from the built-in sample emails."""
+    all_tasks = []
     for email in MOCK_EMAILS:
-        tasks = extract_tasks_hybrid(
+        all_tasks.extend(extract_tasks_hybrid(
             email_subject=email["subject"],
             email_body=email["body"],
             sender=email["sender"],
             email_date=email["date"],
             email_id=email["id"],
-        )
-        all_tasks.extend(tasks)
-
-    # Deduplicate by task ID
+        ))
     seen = set()
-    deduped_tasks = []
+    deduped = []
     for task in all_tasks:
         if task.id not in seen:
             seen.add(task.id)
-            deduped_tasks.append(task)
+            deduped.append(task)
+    return deduped
 
-    return TasksResponse(tasks=deduped_tasks, total=len(deduped_tasks))
+
+@app.get("/api/tasks", response_model=TasksResponse)
+def get_tasks():
+    """
+    Return pending tasks. Source precedence:
+      1. Live Gmail (read-only) when OAuth is configured (credentials/token present)
+      2. Synced Gmail snapshot (backend/app/data/gmail_tasks.json) — real tasks
+      3. Built-in mock emails (demo fallback)
+    """
+    tasks: list[Task] | None = None
+
+    if gmail_client.is_configured():
+        try:
+            tasks = gmail_client.fetch_tasks()
+        except Exception as e:
+            print(f"Live Gmail fetch failed, falling back to cache/mock: {e}")
+
+    if not tasks:
+        tasks = _tasks_from_cache()
+
+    if not tasks:
+        tasks = _tasks_from_mock()
+
+    return TasksResponse(tasks=tasks, total=len(tasks))
 
 
 @app.get("/")

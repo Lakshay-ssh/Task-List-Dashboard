@@ -42,15 +42,12 @@ class TestDueDateExtraction:
         result = extract_due_date("by 07/10/2026")
         assert result == date(2026, 7, 10)
 
-    def test_fallback_no_date(self):
-        result = extract_due_date("No date specified")
-        expected = (datetime.now() + timedelta(days=7)).date()
-        assert result == expected
+    def test_no_date_returns_none(self):
+        # We do not invent a deadline when the email states none.
+        assert extract_due_date("No date specified") is None
 
-    def test_fallback_with_email_date(self):
-        email_date = datetime(2026, 7, 1)
-        result = extract_due_date("No date here", email_date)
-        assert result == date(2026, 7, 8)
+    def test_no_date_with_email_date_still_none(self):
+        assert extract_due_date("No date here", datetime(2026, 7, 1)) is None
 
 
 class TestTaskRegexExtraction:
@@ -135,7 +132,7 @@ class TestTaskHybridExtraction:
             assert task.title is not None
             assert task.description is not None
             assert task.priority in ["high", "medium", "low"]
-            assert task.due_date is not None
+            # due_date may be None when the email states no deadline
             assert task.sender == "test@team.com"
 
 

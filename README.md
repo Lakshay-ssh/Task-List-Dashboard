@@ -31,18 +31,34 @@ Open **http://localhost:8000/** in any browser.
 That's it. Refresh button re-fetches from the backend. Filters, search, task
 detail modal, and completion toggle all work client-side.
 
-### 4. Wire Real Gmail (Future)
+## Gmail data — three sources (auto-selected)
 
-#### Option A: MCP Connector (Recommended)
-1. Authorize `plugin:small-business:gmail` via Claude Code MCP settings
-2. Update `backend/app/main.py` to call Gmail MCP tools instead of mock data
-3. Backend will fetch real emails and extract tasks
+`GET /api/tasks` picks the first available source, in order:
 
-#### Option B: Direct Gmail API
-1. Create OAuth 2.0 credentials in Google Cloud Console
-2. Add credentials to `backend/.env`
-3. Implement OAuth flow in `backend/app/services/gmail_client.py`
-4. Call Gmail API directly from backend
+1. **Live Gmail** (read-only) — when OAuth is configured (see below).
+2. **Synced snapshot** — real tasks in [backend/app/data/gmail_tasks.json](backend/app/data/gmail_tasks.json),
+   pulled read-only from the inbox. This ships populated, so the dashboard shows
+   real tasks with zero setup.
+3. **Mock emails** — demo fallback if neither above exists.
+
+Everything is **read-only**: no email is ever sent, modified, or deleted.
+
+### Connect Gmail for live refresh (optional)
+
+One-time setup so the Refresh button pulls new mail live:
+
+1. Install the Gmail deps: `cd backend && uv sync --extra gmail`
+2. Google Cloud Console → enable the Gmail API → create an OAuth client
+   (application type: **Desktop app**).
+3. Download the client JSON to `backend/credentials.json`.
+4. Restart the server and open the dashboard. The first request opens a browser
+   consent screen (scope: `gmail.readonly`). A token caches to
+   `backend/token.json`; subsequent refreshes are silent.
+
+`credentials.json` and `token.json` are git-ignored — never commit them.
+
+To re-sync the snapshot instead (no OAuth), ask Claude Code to refresh it via the
+connected Gmail connector.
 
 ## Architecture
 

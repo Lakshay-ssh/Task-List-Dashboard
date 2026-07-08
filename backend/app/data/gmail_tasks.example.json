@@ -1,0 +1,37 @@
+{
+  "synced_at": "2026-01-01",
+  "source": "gmail:you@example.com",
+  "_note": "Copy this to gmail_tasks.json (git-ignored) or let the OAuth live path populate tasks. Real inbox data must not be committed.",
+  "tasks": [
+    {
+      "id": "sample_1",
+      "title": "Attend appointment: Complex Tax Return review",
+      "description": "Confirmed in-office appointment. Thu 23 Jul, 2:00 PM (1 hour).",
+      "priority": "high",
+      "due_date": "2026-07-23",
+      "sender": "no-reply@scheduler.example.com",
+      "email_id": "sample_email_1",
+      "completed": false
+    },
+    {
+      "id": "sample_2",
+      "title": "Finalize Q4 BAS for client",
+      "description": "Client confirmed the transaction list. Finalize and lodge the Business Activity Statement.",
+      "priority": "high",
+      "due_date": null,
+      "sender": "client@example.com",
+      "email_id": "sample_email_2",
+      "completed": false
+    },
+    {
+      "id": "sample_3",
+      "title": "Review purchases spreadsheet",
+      "description": "Review the transaction list and process the new columns the client provided.",
+      "priority": "medium",
+      "due_date": null,
+      "sender": "client@example.com",
+      "email_id": "sample_email_3",
+      "completed": false
+    }
+  ]
+}

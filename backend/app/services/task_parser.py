@@ -1,6 +1,6 @@
 import re
 import hashlib
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Optional
 from app.schemas import Task
 
@@ -20,8 +20,9 @@ def extract_priority(text: str) -> str:
         return 'low'
 
 
-def extract_due_date(text: str, email_date: Optional[datetime] = None) -> datetime.date:
-    """Extract due date from email text using regex and fallback patterns."""
+def extract_due_date(text: str, email_date: Optional[datetime] = None):
+    """Extract a due date from email text. Returns a date, or None if the email
+    specifies no deadline (we do not invent one)."""
     text_lower = text.lower()
 
     # Pattern: "due [date format]" or "deadline:" - supports both MM/DD and YYYY-MM-DD
@@ -38,20 +39,14 @@ def extract_due_date(text: str, email_date: Optional[datetime] = None) -> dateti
         match = re.search(pattern, text_lower)
         if match:
             date_str = match.group(1)
-            try:
-                # Try common date formats
-                for fmt in ['%Y-%m-%d', '%m/%d/%Y', '%d/%m/%Y', '%m-%d-%Y', '%d-%m-%Y']:
-                    try:
-                        parsed = datetime.strptime(date_str, fmt)
-                        return parsed.date()
-                    except ValueError:
-                        continue
-            except Exception:
-                pass
+            for fmt in ['%Y-%m-%d', '%m/%d/%Y', '%d/%m/%Y', '%m-%d-%Y', '%d-%m-%Y']:
+                try:
+                    return datetime.strptime(date_str, fmt).date()
+                except ValueError:
+                    continue
 
-    # Fallback: if email_date provided, add 7 days; otherwise use today + 7 days
-    base_date = email_date or datetime.now()
-    return (base_date + timedelta(days=7)).date()
+    # No deadline found — leave it unset rather than fabricating one.
+    return None
 
 
 def extract_tasks_regex(email_subject: str, email_body: str, sender: str, email_date: Optional[datetime] = None, email_id: Optional[str] = None) -> list[Task]:
@@ -116,7 +111,7 @@ Return ONLY valid JSON in this format (no markdown, no explanation):
 
 If no clear tasks, return empty array [].
 Prioritize: high=urgent/asap/critical, medium=important, low=default.
-Due dates: extract from text or fallback to 7 days from now."""
+Due dates: extract from text only. If the email states no deadline, set "due_date" to null (do not invent one)."""
 
         response = client.messages.create(
             model="claude-3-5-sonnet-20241022",
@@ -132,10 +127,13 @@ Due dates: extract from text or fallback to 7 days from now."""
 
         tasks = []
         for task_dict in task_dicts:
-            try:
-                due_date = datetime.strptime(task_dict.get('due_date', ''), '%Y-%m-%d').date() if task_dict.get('due_date') else (email_date or datetime.now()).date() + timedelta(days=7)
-            except ValueError:
-                due_date = (email_date or datetime.now()).date() + timedelta(days=7)
+            raw_due = task_dict.get('due_date')
+            due_date = None
+            if raw_due:
+                try:
+                    due_date = datetime.strptime(raw_due, '%Y-%m-%d').date()
+                except ValueError:
+                    due_date = None
 
             priority = task_dict.get('priority', 'low').lower()
             if priority not in ['high', 'medium', 'low']:

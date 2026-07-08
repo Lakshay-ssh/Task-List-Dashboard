@@ -9,6 +9,13 @@ venv/
 # Environment
 .env
 
+# Gmail OAuth secrets — never commit
+backend/credentials.json
+backend/token.json
+
+# Real synced inbox data (personal/client PII) — keep local only
+backend/app/data/gmail_tasks.json
+
 # uv
 uv.lock
 
